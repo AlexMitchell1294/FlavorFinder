@@ -112,6 +112,8 @@ class SearchEngine:
 
     def get_recipes_by_minutes(self, min_time, max_time, recipe_list):
         timings = set()
+        if max_time >= 130:
+            max_time = max(self.inverse_minute_index.values())
         for t in self.inverse_minute_index.keys():
             if min_time <= t <= max_time:
                 timings.update(self.inverse_minute_index[t])

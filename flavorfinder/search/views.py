@@ -28,6 +28,11 @@ def search(request):
         page_number = request.GET.get('page')
     paginator = Paginator(items_list, 30)
     page_obj = paginator.get_page(page_number)
-    data = [int(x) for x in recipe_ids]
+    if recipe_ids is not None:
+        data = [int(x) for x in recipe_ids]
+    else:
+        data = None
     request.session['stored_content'] = data
-    return render(request, 'index.html', {'page_obj': page_obj, "stored_content": data})
+    ingredients = list(searchEngine.inverse_ingredient_index.keys())
+    tags = list(searchEngine.inverse_tag_index.keys())
+    return render(request, 'index.html', {'page_obj': page_obj, "stored_content": data, "ingredients": ingredients, "tags": tags})

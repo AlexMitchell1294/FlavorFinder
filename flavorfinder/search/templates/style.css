@@ -1,0 +1,17 @@
+.ingredient_list{
+    overflow-y: scroll;
+    height :400px;
+}
+
+/* Basic CSS for grid layout */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 20px;
+}
+.grid-item {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: center;
+}

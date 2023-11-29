@@ -3,27 +3,73 @@
 <head>
   <meta charset="UTF-8">
   <title>Recipes</title>
+   <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+  <link rel="stylesheet" href="/resources/demos/style.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+  <script>
+  $( function() {
+    $( "#slider-range" ).slider({
+      range: true,
+      min: 0,
+      max: 130,
+      values: [ 0, 130 ],
+      slide: function( event, ui ) {
+        $( "#amount" ).val( ui.values[ 0 ] + " - " + ui.values[ 1 ] );
+      }
+    });
+    $( "#amount" ).val($( "#slider-range" ).slider( "values", 0 ) +
+      " - " + $( "#slider-range" ).slider( "values", 1 ) );
+  } );
+  </script>
+  </script>
   <style>
-    /* Basic CSS for grid layout */
-    .grid-container {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-      padding: 20px;
-    }
-    .grid-item {
-      border: 1px solid #ccc;
-      padding: 10px;
-      text-align: center;
-    }
+    .ingredient_list{
+    overflow-y: scroll;
+    height :100px;
+    border-style: solid;
+}
+
+/* Basic CSS for grid layout */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 20px;
+}
+.grid-item {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: center;
+}
+
   </style>
+  <!--  <link rel="stylesheet" href="style.css">-->
 </head>
 <body>
-  <div>
+    <div>
       <form method="post" accept-charset="">
+      <div>
         {% csrf_token %}
           <label for="query">I want to make</label><input type="text" id="query" name="query">
           <button type="submit">Search</button>
+        <br>
+        <div class="ingredient_list">
+        {% for ingredient in ingredients%}
+        <input type="checkbox" id=ingredient name=ingredient value="ingredient">
+        <label for="ingredient">{{ingredient}}</label>
+        {% endfor %}
+          </div>
+        <div class="ingredient_list">
+        {% for tag in tags%}
+        <input type="checkbox" id=tag name=tag value="tag">
+        <label for="tag">{{tag}}</label>
+        {% endfor %}
+          </div>
+    <label for="amount">Minutes:</label>
+    <input type="text" id="amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
+      </div>
+        <div id="slider-range"></div>
       </form>
   </div>
   <div class="grid-container">
