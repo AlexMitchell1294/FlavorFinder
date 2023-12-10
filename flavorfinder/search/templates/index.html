@@ -46,6 +46,20 @@
   </style>
   <!--  <link rel="stylesheet" href="style.css">-->
 </head>
+{% if user.is_authenticated %}
+    <p>Welcome, {{ user.username }}!</p>
+    <form action="{% url 'logout' %}?next=/search/" method="post">
+        {% csrf_token %}
+        <button type="submit">Logout</button>
+    </form>
+{% else %}
+    <form action="{% url 'login' %}" method="post">
+        {% csrf_token %}
+        <input type="text" name="username" placeholder="Username">
+        <input type="password" name="password" placeholder="Password">
+        <button type="submit">Login</button>
+    </form>
+{% endif %}
 <body>
     <div>
       <form method="post" accept-charset="">
@@ -54,18 +68,6 @@
           <label for="query">I want to make</label><input type="text" id="query" name="query">
           <button type="submit">Search</button>
         <br>
-        <div class="ingredient_list">
-        {% for ingredient in ingredients%}
-        <input type="checkbox" id=ingredient name=ingredient value="ingredient">
-        <label for="ingredient">{{ingredient}}</label>
-        {% endfor %}
-          </div>
-        <div class="ingredient_list">
-        {% for tag in tags%}
-        <input type="checkbox" id=tag name=tag value="tag">
-        <label for="tag">{{tag}}</label>
-        {% endfor %}
-          </div>
     <label for="amount">Minutes:</label>
     <input type="text" id="amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
       </div>
@@ -75,8 +77,9 @@
   <div class="grid-container">
     {% for recipe in page_obj %}
       <div class="grid-item">
-        <h3>{{ recipe.name }}</h3>
-          <p>{{ recipe.ingredients }}</p>
+
+        <h3><a href="recipe?key={{recipe.id}}">{{ recipe.name }}</a></h3>
+          <p>{{ recipe.description }}</p>
         <!-- Add more details here as needed -->
       </div>
     {% endfor %}

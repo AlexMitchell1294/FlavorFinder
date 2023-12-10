@@ -1,11 +1,181 @@
+import sqlite3
+
 import pandas as pd
 import pickle as pk
 import ast
 import re
 import nltk
+from django.db.models import When, Case, IntegerField
 from nltk.stem import PorterStemmer
 from collections import Counter
+from itertools import combinations
 import time
+import tensorflow_recommenders as tfrs
+import tensorflow as tf
+from tqdm import tqdm
+
+
+interaction_data = pd.read_csv("data/RAW_interactions.csv")
+recipe_data = pd.read_csv("data/RAW_recipes.csv")
+
+interaction_train = pd.read_csv("data/interactions_train.csv")
+interaction_test = pd.read_csv("data/interactions_test.csv")
+interaction_data = interaction_data.astype({'user_id': 'string', 'recipe_id': 'string'})
+interaction_train = interaction_train.astype({'user_id': 'string', 'recipe_id': 'string'})
+interaction_test = interaction_test.astype({'user_id': 'string', 'recipe_id': 'string'})
+
+uniqueUserIds = interaction_data.user_id.unique()
+uniqueFoodIds = interaction_data.recipe_id.unique()
+
+
+def text_search(query, user_id):
+    time1 = time.time()
+    all_q = generate_substrings(query)
+    tokens = [format_query(q) for q in all_q]
+    conn = sqlite3.Connection("db.sqlite3")
+    cur = conn.cursor()
+    sql = 'SELECT name, recipe FROM search_index WHERE name IN ({0})'.format(', '.join('?' for _ in tokens))
+    cur.execute(sql, tokens)
+
+    rows = cur.fetchall()
+    conn.close()
+    search_results = {}
+    for row in rows:
+        if row[0] in search_results.keys():
+            search_results[row[0]].append(row[1])
+        else:
+            search_results[row[0]] = [row[1]]
+    # print(search_results)
+    # print(time.time() - time1)
+    # time2 = time.time()
+    # time2 = time.time()
+    # if token in search_results.keys():
+    #     search_results[token].extend([item[0] for item in row])
+    # else:
+    #     search_results[token] = [item[0] for item in row]
+    # print(search_results)
+
+    ret_results = set(list(search_results.values())[0])
+    for i in range(1, len(search_results.keys())):
+        if list(search_results.values())[i]:
+            set2 = set(list(search_results.values())[i])
+            ret_results = ret_results.intersection(set2)
+    # conn.close()
+
+    ############
+    # plug into model
+
+    ############
+    time4 = time.time()
+    print(time4 - time1)
+    return list(ret_results)
+
+
+def format_query(q):
+    stemmer = PorterStemmer()
+    q = re.sub('[^a-z0-9 *]', ' ', q.lower())
+    q = stemmer.stem(q)
+    return q
+
+
+def generate_substrings(text):
+    words = text.split()
+    substrings = [' '.join(words[i:j]) for i, j in combinations(range(len(words) + 1), 2)]
+    return substrings
+
+
+def predict_all_user_food_pairs(model, uniqueUserIds, uniqueFoodIds, batch_size=64):
+    predictions_df = pd.DataFrame(columns=["user_id", "recipe_id", "prediction"])
+
+    i = 0
+    for user_batch in tf.data.Dataset.from_tensor_slices(uniqueUserIds).batch(batch_size):
+        user_batch = tf.cast(user_batch, tf.string)
+        user_embeddings = model.ranking_model.user_embeddings(user_batch)
+
+        for food_batch in tf.data.Dataset.from_tensor_slices(uniqueFoodIds).batch(batch_size):
+            food_batch = tf.cast(food_batch, tf.string)
+            food_embeddings = model.ranking_model.product_embeddings(food_batch)
+
+            user_embeddings_expanded = tf.repeat(user_embeddings, len(food_batch), axis=0)
+            food_embeddings_expanded = tf.tile(food_embeddings, [len(user_batch), 1])
+
+            batch_predictions = model.ranking_model.ratings(
+                tf.concat([user_embeddings_expanded, food_embeddings_expanded], axis=1)
+            )
+
+            batch_df = pd.DataFrame({
+                "user_id": tf.repeat(user_batch, len(food_batch)).numpy(),
+                "recipe_id": tf.tile(food_batch, [len(user_batch)]).numpy(),
+                "prediction": batch_predictions.numpy().flatten()
+            })
+
+            predictions_df = pd.concat([predictions_df, batch_df], ignore_index=True)
+
+    return predictions_df
+
+
+def sort_recipes(recipe_ids, userid):
+    from .models import Recipes
+    loaded = tf.saved_model.load("models/")
+    recipe_ids = [str(ele) for ele in recipe_ids]
+    ranked_ids = predict_all_user_food_pairs(loaded, [userid], recipe_ids)
+    ranked_ids = ranked_ids.sort_values(by="prediction")
+    ranked_ids = ranked_ids["recipe_id"].tolist()[:1000]
+
+    whens = [When(id=id_val, then=pos) for pos, id_val in enumerate(ranked_ids)]
+
+    # Create a Case expression using the When expressions
+    case_expression = Case(*whens, default=0, output_field=IntegerField())
+    return Recipes.objects.filter(id__in=ranked_ids).order_by(case_expression)
+
+
+class RankingModel(tf.keras.Model):
+
+    def __init__(self):
+        super().__init__()
+        embedding_dimension = 32
+
+        self.user_embeddings = tf.keras.Sequential([
+            tf.keras.layers.experimental.preprocessing.StringLookup(
+                vocabulary=uniqueUserIds, mask_token=None),
+            # add addional embedding to account for unknow tokens
+            tf.keras.layers.Embedding(len(uniqueUserIds) + 1, embedding_dimension)
+        ])
+
+        self.product_embeddings = tf.keras.Sequential([
+            tf.keras.layers.experimental.preprocessing.StringLookup(
+                vocabulary=uniqueFoodIds, mask_token=None),
+            # add addional embedding to account for unknow tokens
+            tf.keras.layers.Embedding(len(uniqueFoodIds) + 1, embedding_dimension)
+        ])
+        # Set up a retrieval task and evaluation metrics over the
+        # entire dataset of candidates.
+        self.ratings = tf.keras.Sequential([
+            tf.keras.layers.Dense(256, activation="relu"),
+            tf.keras.layers.Dense(64, activation="relu"),
+            tf.keras.layers.Dense(1)
+        ])
+
+    def call(self, userId, foodId):
+        user_embeddings = self.user_embeddings(userId)
+        food_embeddings = self.product_embeddings(foodId)
+        return self.ratings(tf.concat([user_embeddings, food_embeddings], axis=1))
+
+
+# Build a model.
+class FoodModel(tfrs.models.Model):
+
+    def __init__(self):
+        super().__init__()
+        self.ranking_model: tf.keras.Model = RankingModel()
+        self.task: tf.keras.layers.Layer = tfrs.tasks.Ranking(
+            loss=tf.keras.losses.MeanSquaredError(),
+            metrics=[tf.keras.metrics.RootMeanSquaredError()])
+
+    def compute_loss(self, features, training=False):
+        rating_predictions = self.ranking_model(features["userID"], features["foodID"])
+
+        return self.task(labels=features["rating"], predictions=rating_predictions)
 
 
 class SearchEngine:
@@ -16,7 +186,8 @@ class SearchEngine:
         self.stemmer = PorterStemmer()
         self.recipes = pd.read_csv("data/RAW_recipes.csv")
 
-    def search(self, list_of_ingredients, amount_of_ingredient_match, list_of_tags, amount_of_tags_match, min_time, max_time):
+    def search(self, list_of_ingredients, amount_of_ingredient_match, list_of_tags, amount_of_tags_match, min_time,
+               max_time):
         start_time = time.time()
         search_result_ingredient = self.search_by_ingredients(list_of_ingredients, amount_of_ingredient_match)
         search_result_tag = self.search_by_tags(list_of_tags, amount_of_tags_match)
@@ -28,19 +199,20 @@ class SearchEngine:
     def pretty_return(self, list_of_recipe_id):
         # for recipe in list_of_recipe_id:
         pass
+
     def create_inverse_index(self):
         self.recipes["ingredients"] = self.recipes["ingredients"].apply(ast.literal_eval)
         self.recipes["tags"] = self.recipes["tags"].apply(ast.literal_eval)
         for i, list_of_recipes in enumerate(self.recipes.iterrows()):
 
             for ingredient in self.recipes.iloc[i]["ingredients"]:
-                ingredient = self.format_query(ingredient)
+                ingredient = format_query(ingredient)
                 if ingredient in self.inverse_ingredient_index.keys():
                     self.inverse_ingredient_index[ingredient].append(self.recipes.iloc[i]["id"])
                 else:
                     self.inverse_ingredient_index[ingredient] = [self.recipes.iloc[i]["id"]]
             for tag in self.recipes.iloc[i]["tags"]:
-                tag = self.format_query(tag)
+                tag = format_query(tag)
                 if tag in self.inverse_tag_index.keys():
                     self.inverse_tag_index[tag].append(self.recipes.iloc[i]["id"])
                 else:
@@ -67,7 +239,7 @@ class SearchEngine:
             self.inverse_minute_index = pk.load(f)
 
     def get_ingredient_list(self, ingredient):
-        ingredient = self.format_query(ingredient)
+        ingredient = format_query(ingredient)
         return self.inverse_ingredient_index[ingredient]
 
     def get_recipe(self, recipe_id):
@@ -88,7 +260,7 @@ class SearchEngine:
             list of recipes_ids
 
         """
-        tokenized = [self.format_query(ingredient) for ingredient in list_of_ingredients]
+        tokenized = [format_query(ingredient) for ingredient in list_of_ingredients]
 
         recipe_counts = Counter()
         for token in tokenized:
@@ -97,18 +269,13 @@ class SearchEngine:
         return [key for key, value in recipe_counts.items() if value >= accuracy]
 
     def search_by_tags(self, list_of_tags, accuracy):
-        tokenized = [self.format_query(tag) for tag in list_of_tags]
+        tokenized = [format_query(tag) for tag in list_of_tags]
 
         recipe_counts = Counter()
         for token in tokenized:
             recipe_counts.update(self.inverse_tag_index.get(token, []))
 
         return [key for key, value in recipe_counts.items() if value >= accuracy]
-    def format_query(self, q):
-        q = q.lower()
-        q = re.sub('[^a-z0-9 *]', ' ', q.lower())
-        q = self.stemmer.stem(q)
-        return q
 
     def get_recipes_by_minutes(self, min_time, max_time, recipe_list):
         timings = set()

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ recipe.name }}</title>
+    <style>
+/* Add appropriate styles for the carousel and items */
+.carousel {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.carousel-inner {
+    display: flex;
+    transition: transform 0.5s ease;
+}
+
+.carousel-item {
+    width: 100%; /* Adjust as needed */
+}
+
+.item-container {
+    display: flex;
+}
+
+.item {
+    flex: 0 0 25%; /* Each item takes 25% of the container width */
+    /* Adjust styles for individual items */
+    border: 1px solid #ccc;
+    padding: 10px;
+    box-sizing: border-box;
+}
+    </style>
+<!--    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>-->
+
+
+</head>
+<body>
+<a href="/search">Back</a>
+<h1>{{ recipe.name }}</h1>
+<p>{{ recipe.description }}</p>
+
+<p>{{ recipe.tags }}</p>
+<ul>
+    <h2>Ingredients</h2>
+    {% for ingredient in ingredients %}
+        <li>{{ingredient}}</li>
+    {% endfor %}
+</ul>
+
+<ol>
+    <h2>Directions</h2>
+    {% for step in steps %}
+        <li>{{step}}</li>
+    {% endfor %}
+</ol>
+<div class="carousel">
+    <div class="carousel-inner">
+        {% for chunk in grouped_items %}
+            <div class="carousel-item">
+                <div class="item-container">
+                    {% for item in chunk %}
+                        <div class="item">{{ item.name }}</div>
+                        <!-- Display other item details as needed -->
+                    {% endfor %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    <button class="carousel-control prev">Previous</button>
+    <button class="carousel-control next">Next</button>
+</div>
+
+<!-- Add JS for carousel functionality -->
+<!--<script src="/flavorfinder/static/flavorfinder/search/templates/script.js"></script>-->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const carouselItems = document.querySelectorAll('.carousel-item');
+    const prevButton = document.querySelector('.carousel-control.prev');
+    const nextButton = document.querySelector('.carousel-control.next');
+
+    let currentIndex = 0;
+
+
+    function showItems(index) {
+
+        carouselItems.forEach((item, i) => {
+            if (i >= index && i < index + 1) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    prevButton.addEventListener('click', function () {
+        if (currentIndex > 0) {
+            currentIndex -= 1;
+            showItems(currentIndex);
+        }
+    });
+
+    nextButton.addEventListener('click', function () {
+        if (currentIndex + 1 < carouselItems.length) {
+            currentIndex += 1;
+            showItems(currentIndex);
+        }
+    });
+
+    // Show initial items
+    showItems(currentIndex);
+});
+    </script>
+</div>
+</body>
+</html>
