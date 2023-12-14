@@ -91,7 +91,7 @@ def recipe(request):
     except:
         content_recs = top_recipes
     print(content_recs)
-    content_recs = [item_id_label_reverse[i] for i in content_recs]
+    # content_recs = [item_id_label_reverse[i] for i in content_recs]
     reccomended_items = Recipes.objects.filter(id__in=content_recs)
     print(reccomended_items)
     grouped = [reccomended_items[0:4], reccomended_items[4:8], reccomended_items[8:12]]

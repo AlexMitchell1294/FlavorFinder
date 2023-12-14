@@ -9,6 +9,7 @@ import numpy as np  # linear algebra
 import pandas as pd  # data processing, CSV file I/O (e.g. pd.read_csv)
 import tqdm.notebook as tqdm  # progress bars
 # import implicit # Fast, sparse ALS implementation
+from search.search_engine import format_query
 
 from itertools import product
 
@@ -72,6 +73,7 @@ def make_recipe_ingr_xref(recipes):
     index = 0
     for row in tqdm.tqdm(recipes['ingredients'].index):
         for ingr_id in recipes['ingredients'][row]:
+            ingr_id = format_query(ingr_id)
             recipe_ids.append(recipes.loc[row, 'id'])
             if ingr_id not in ingredient_ids.keys():
                 ingredient_ids[ingr_id] = index
