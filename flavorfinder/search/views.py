@@ -22,12 +22,14 @@ def search(request):
     print(request.user.username)
     recipe_ids = request.session.get('stored_content')
     minimum = 0 if request.session.get('minimum') is None else request.session.get('minimum')
-    maximum = 120 if request.session.get('maximum') is None else request.session.get('maximum')
+    maximum = 525960 if request.session.get('maximum') is None else request.session.get('maximum')
     last_query = "" if request.session.get('last_query') is None else request.session.get('last_query')
     if request.method == 'POST':
         amount = request.POST['amount'].split("-")
         minimum = int(amount[0])
         maximum = int(re.sub("[^0-9]", "", amount[1]))
+        if maximum == 120:
+            maximum = 525960
         query = request.POST['query']
         last_query = query
         recipe_ids = text_search(query, request.user)
@@ -90,12 +92,13 @@ def recipe(request):
         content_recs = similar_recipes(tf_idf_embeddings, int(key), 12)
     except:
         content_recs = top_recipes
-    print(content_recs)
+    # print(content_recs)
+    reccomended_items = sort_recipes(content_recs, request.user.username, 0, 525960)
     # content_recs = [item_id_label_reverse[i] for i in content_recs]
-    reccomended_items = Recipes.objects.filter(id__in=content_recs)
-    print(reccomended_items)
+    # reccomended_items = Recipes.objects.filter(id__in=content_recs)
+    # print(reccomended_items)
     grouped = [reccomended_items[0:4], reccomended_items[4:8], reccomended_items[8:12]]
-    print(grouped)
+    # print(grouped)
 
     # steps = generic.ListView(recipe_data.steps)
     return render(request, 'recipe.html',
