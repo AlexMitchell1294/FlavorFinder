@@ -61,7 +61,9 @@
             <div class="carousel-item">
                 <div class="item-container">
                     {% for item in chunk %}
-                        <div class="item">{{ item.name }}</div>
+                        <div class="item">
+                            <a href="/search/recipe?key={{item.id}}">{{ item.name }}</a>
+                        </div>
                         <!-- Display other item details as needed -->
                     {% endfor %}
                 </div>

@@ -12,14 +12,26 @@
     $( "#slider-range" ).slider({
       range: true,
       min: 0,
-      max: 130,
-      values: [ 0, 130 ],
+      max: 120,
+      values: [ 0, 120 ],
       slide: function( event, ui ) {
-        $( "#amount" ).val( ui.values[ 0 ] + " - " + ui.values[ 1 ] );
+          if (ui.values[ 1 ] >= 120){
+              $("#amount").val(ui.values[0] + "-" + ui.values[1] + "+");
+          }
+          else{
+              $("#amount").val(ui.values[0] + "-" + ui.values[1]);
+          }
       }
     });
-    $( "#amount" ).val($( "#slider-range" ).slider( "values", 0 ) +
-      " - " + $( "#slider-range" ).slider( "values", 1 ) );
+    console.log($( "#slider-range" ).slider( "values", 1 ))
+    if($( "#slider-range" ).slider( "values", 1 ) >= 120){
+            $( "#amount" ).val(""+$( "#slider-range" ).slider( "values", 0 ) + "-" +
+       $( "#slider-range" ).slider( "values", 1 ) + "+");
+    }
+    else {
+        $("#amount").val("" + $("#slider-range").slider("values", 0) + "-" +
+            $("#slider-range").slider("values", 1));
+    }
   } );
   </script>
   </script>
@@ -41,6 +53,10 @@
   border: 1px solid #ccc;
   padding: 10px;
   text-align: center;
+}
+
+.slider-range {
+    width: 20%;
 }
 
   </style>
@@ -65,13 +81,20 @@
       <form method="post" accept-charset="">
       <div>
         {% csrf_token %}
-          <label for="query">I want to make</label><input type="text" id="query" name="query">
+          <label for="query">I want to make</label>
+          <input type="text" id="query" name="query" value="{{last_query}}">
+          <select name="algo" id="algo">
+              <option value="nn" selected="selected">Neural Network</option>
+<!--              <option value="user_col">User-based collaborative filtering</option>-->
+              <option value="item_col">Item-based collaborative filtering</option>
+          </select>
           <button type="submit">Search</button>
         <br>
-    <label for="amount">Minutes:</label>
-    <input type="text" id="amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
-      </div>
-        <div id="slider-range"></div>
+            <label for="amount">Minutes:</label>
+            <input type="text" id="amount" name="amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
+
+            <div id="slider-range" class="slider-range"></div>
+          </div>
       </form>
   </div>
   <div class="grid-container">

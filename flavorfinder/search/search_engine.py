@@ -1,6 +1,7 @@
 import sqlite3
 
 import pandas as pd
+import numpy as np
 import pickle as pk
 import ast
 import re
@@ -12,11 +13,22 @@ from itertools import combinations
 import time
 import tensorflow_recommenders as tfrs
 import tensorflow as tf
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import joblib
 from tqdm import tqdm
+from collections import defaultdict
+import pandas as pd
+import csv
+import numpy as np
+from scipy import sparse
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 interaction_data = pd.read_csv("data/RAW_interactions.csv")
 recipe_data = pd.read_csv("data/RAW_recipes.csv")
+
+
 
 interaction_train = pd.read_csv("data/interactions_train.csv")
 interaction_test = pd.read_csv("data/interactions_test.csv")
@@ -24,8 +36,15 @@ interaction_data = interaction_data.astype({'user_id': 'string', 'recipe_id': 's
 interaction_train = interaction_train.astype({'user_id': 'string', 'recipe_id': 'string'})
 interaction_test = interaction_test.astype({'user_id': 'string', 'recipe_id': 'string'})
 
+
 uniqueUserIds = interaction_data.user_id.unique()
 uniqueFoodIds = interaction_data.recipe_id.unique()
+
+tf_idf_embeddings = joblib.load('tfidf_transformer.pkl')
+
+
+
+
 
 
 def text_search(query, user_id):
@@ -45,21 +64,14 @@ def text_search(query, user_id):
             search_results[row[0]].append(row[1])
         else:
             search_results[row[0]] = [row[1]]
-    # print(search_results)
-    # print(time.time() - time1)
-    # time2 = time.time()
-    # time2 = time.time()
-    # if token in search_results.keys():
-    #     search_results[token].extend([item[0] for item in row])
-    # else:
-    #     search_results[token] = [item[0] for item in row]
-    # print(search_results)
-
-    ret_results = set(list(search_results.values())[0])
-    for i in range(1, len(search_results.keys())):
-        if list(search_results.values())[i]:
-            set2 = set(list(search_results.values())[i])
-            ret_results = ret_results.intersection(set2)
+    if search_results.values():
+        ret_results = set(list(search_results.values())[0])
+        for i in range(1, len(search_results.keys())):
+            if list(search_results.values())[i]:
+                set2 = set(list(search_results.values())[i])
+                ret_results = ret_results.intersection(set2)
+    else:
+        ret_results = []
     # conn.close()
 
     ############
@@ -67,7 +79,7 @@ def text_search(query, user_id):
 
     ############
     time4 = time.time()
-    print(time4 - time1)
+    print("LOG: ", time4 - time1)
     return list(ret_results)
 
 
@@ -113,8 +125,100 @@ def predict_all_user_food_pairs(model, uniqueUserIds, uniqueFoodIds, batch_size=
 
     return predictions_df
 
+def cosine_similar_predictions(embeddings, query):
+    '''
+    embeddings is a matrix of shape (num_recipes, num_features)
+    query is a list of length num_features
 
-def sort_recipes(recipe_ids, userid):
+    Returns an array of cosine similarity scores between the query and each row of embeddings
+    '''
+
+    # Ensure that the query is a 2D array (reshape if necessary)
+    query = query.reshape(1, -1)
+
+    # Compute cosine similarity between the query and each row of the embeddings matrix
+    similarity_scores = cosine_similarity(embeddings, query).squeeze()
+
+    return similarity_scores
+
+def similar_recipes(embeddings, recipe_id, k):
+    # Values for each recipe based on similarity to given recipe
+    similarities = cosine_similar_predictions(embeddings, embeddings[recipe_id])
+
+    # Get reccomendations, filtering out the queries recipe
+    return get_reccomendations(similarities, k, filtered_recipe_ids=[recipe_id])
+
+
+def get_reccomendations(predictions, k, filtered_recipe_ids=[], filter_val=-100):
+    # Replace all recipes to be filtered out with the filter value, which should be a lower value
+    predictions[filtered_recipe_ids] = filter_val
+
+    # Get the top k reccomendations for the user (NOTE: these are not in order)
+    unsorted_recs = np.argpartition(predictions, -k)[-k:]
+
+    # Sort the reccomendations by their predictions values, in descending order
+    sorted_recs = sorted(unsorted_recs, key=lambda rec: predictions[rec], reverse=True)
+
+    return sorted_recs
+
+reviewsPerUser = defaultdict(list)
+reviewsPerItem = defaultdict(list)
+def get_cfiltering_data():
+    f = open('data/interactions_train.csv', 'r', encoding='utf-8-sig')
+    f1 = open('data/interactions_test.csv', 'r', encoding='utf-8-sig')
+    f2 = open('data/interactions_validation.csv', 'r', encoding='utf-8-sig')
+    header = f.readline().strip().split(',')
+    header = f1.readline().strip().split(',')
+    header = f2.readline().strip().split(',')
+    # del header[-1]
+    dataset = []
+    # Print the header and fields
+    print("Header:", header)
+    for line in f:
+        fields = line.strip().split(',')
+        # del fields[-1]
+        d = dict(zip(header, fields))
+        dataset.append(d)
+    for line in f1:
+        fields = line.strip().split(',')
+        # del fields[-1]
+        d = dict(zip(header, fields))
+        dataset.append(d)
+    for line in f2:
+        fields = line.strip().split(',')
+        # del fields[-1]
+        d = dict(zip(header, fields))
+        dataset.append(d)
+    f.close()
+    f1.close()
+    f2.close()
+
+    for d in dataset:
+        user = int(d['user_id'])
+        recipe = int(d['recipe_id'])
+        reviewsPerUser[user].append(d)
+        reviewsPerItem[recipe].append(d)
+
+    return pd.DataFrame(dataset), dataset
+
+df, dataset = get_cfiltering_data()
+item_id_label = dict(zip(df['recipe_id'], range(len(df['recipe_id']))))
+item_id_label_reverse = dict(zip(range(len(df['recipe_id'])), df['recipe_id']))
+user_id_label = dict(zip(df['user_id'], range(len(df['user_id']))))
+user_id_label_reverse = dict(zip(range(len(df['user_id'])), df['user_id']))
+
+ratings = df['rating'].tolist()
+ratings = [float(i) for i in ratings]
+user_id = df['user_id'].tolist()
+user_id = [int(user_id_label[i]) for i in user_id]
+recipe_id = df['recipe_id'].tolist()
+recipe_id = [int(item_id_label[i]) for i in recipe_id]
+
+matrix = sparse.csr_matrix((ratings,(recipe_id, user_id)))
+
+
+
+def sort_recipes(recipe_ids, userid, minimum, maximum):
     from .models import Recipes
     loaded = tf.saved_model.load("models/")
     recipe_ids = [str(ele) for ele in recipe_ids]
@@ -126,7 +230,7 @@ def sort_recipes(recipe_ids, userid):
 
     # Create a Case expression using the When expressions
     case_expression = Case(*whens, default=0, output_field=IntegerField())
-    return Recipes.objects.filter(id__in=ranked_ids).order_by(case_expression)
+    return Recipes.objects.filter(id__in=ranked_ids, minutes__range=(minimum, maximum)).order_by(case_expression)
 
 
 class RankingModel(tf.keras.Model):
@@ -177,6 +281,51 @@ class FoodModel(tfrs.models.Model):
 
         return self.task(labels=features["rating"], predictions=rating_predictions)
 
+
+# print(reviewsPerItem)
+# print(reviewsPerUser)
+
+ratingMean = sum([i for i in ratings]) / len(dataset)
+
+def Cosine(s1, s2):
+    dot_product = s1.dot(s2.T)
+    # print(s1, s2)
+    norm_s1 = np.linalg.norm(s1)
+    norm_s2 = np.linalg.norm(s2)
+
+    if norm_s1 == 0 or norm_s2 == 0:
+        return 0.1
+
+    return sum(dot_product / (norm_s1 * norm_s2))[0] + 0.1
+
+def predictRatingCosine(user, item):
+    if str(item) not in list(item_id_label.keys()):
+        return [], []
+    item=item_id_label[str(item)]
+    user=int(user)
+    ratings = []
+    similarities = []
+    for d in reviewsPerUser[user]:
+        # print(d)
+        i2 = d['recipe_id']
+        item2 = item_id_label[str(i2)]
+        if item2 == item:
+            ratings.append(0)
+        else:
+            ratings.append(float(d['rating']))
+        similarities.append(Cosine(matrix[[item2]].toarray().astype(float), matrix[[item]].toarray().astype(float)))
+    return similarities, ratings
+
+def predict_rating(sims, ratings):
+    if sum(sims) == 0:
+        return ratingMean
+    print(sims, ratings)
+    num = sum([sims[i] * ratings[i] for i in range(len(sims))])
+    return num/sum(sims)
+
+def MSE(predictions, labels):
+    differences = [(x-y)**2 for x,y in zip(predictions,labels)]
+    return sum(differences) / len(differences)
 
 class SearchEngine:
     def __init__(self):
