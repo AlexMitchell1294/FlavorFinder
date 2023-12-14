@@ -2,11 +2,14 @@
 ## Initalization
 To create all data you will need to run <br>
 <ul>
-<li>search_creation_script.py</li>
+<li>search_creation_script.py uncommented all</li>
 <li>lr_content_based.py</li>
 <li>cs547ModelAndPred.ipynb</li>
 <li>cfiltering.ipynb</li>
 </ul>
+These scripts create basic boolean search and lookup available.
+tf_idf_embeddings, Neural network work model and parameters,
+and collaborative filtering matrix.
 
 ---
 
@@ -40,3 +43,8 @@ After that you will need to run the following commands
 ---
 
 ## Server should be fully up and running
+Search bar can take any string of words as an input. It wil take Ingredients, tags,
+and recipe names and do boolean search to find all related recipes. Then rank them with the
+Selected dropdown menu algorithm. and return the 1000 highest predicted rating.
+the slider will adjust for time of the recipe. and if you sign-into a profile it will use that profile
+to do recommendations otherwise it will recommend based on user averages.
