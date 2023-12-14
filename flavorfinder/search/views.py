@@ -55,10 +55,14 @@ def search(request):
             pass
         else:
             print("bad request")
-    elif recipe_ids is not None:
+    elif recipe_ids is not None and recipe_ids != []:
         items_list = sort_recipes(list(recipe_ids), request.user.username, minimum, maximum)
         page_number = request.GET.get('page')
     else:
+        page_number = request.GET.get('page')
+        items_list = Recipes.objects.all()[:1000]
+
+    if not recipe_ids:
         page_number = request.GET.get('page')
         items_list = Recipes.objects.all()[:1000]
 

@@ -17,15 +17,15 @@ from sklearn.metrics import mean_squared_error
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import joblib
-recipes = pd.read_csv('data/PP_recipes.csv')
-ingr_map = pd.read_pickle('data/ingr_map.pkl')
+# recipes = pd.read_csv('data/PP_recipes.csv')
+# ingr_map = pd.read_pickle('data/ingr_map.pkl')
 raw_recipes = pd.read_csv('data/RAW_recipes.csv')
 
 raw_recipes.head()
 
-ingr_map.head()
+# ingr_map.head()
 
-recipes.head()
+# recipes.head()
 
 
 def get_tf_idf_embeddings(recipe_ingr_xref):
@@ -69,27 +69,39 @@ def make_recipe_ingr_xref(recipes):
 
     recipe_ids = []
     ingr_ids = []
+    index = 0
+    for row in tqdm.tqdm(recipes['ingredients'].index):
+        for ingr_id in recipes['ingredients'][row]:
+            recipe_ids.append(recipes.loc[row, 'id'])
+            if ingr_id not in ingredient_ids.keys():
+                ingredient_ids[ingr_id] = index
+                index += 1
+            ingr_ids.append(ingredient_ids[ingr_id])
+        # for ingr_id in recipes['tags'][row]:
+        #     recipe_ids.append(recipes.loc[row, 'id'])
+        #     if ingr_id not in ingredient_ids.keys():
+        #         ingredient_ids[ingr_id] = index
+        #         index += 1
+        #     ingr_ids.append(ingredient_ids[ingr_id])
 
-    for row in tqdm.tqdm(recipes['ingredient_ids'].index):
-        for ingr_id in recipes['ingredient_ids'][row]:
-            recipe_ids.append(recipes.loc[row, 'i'])
-            ingr_ids.append(ingr_id)
 
     return pd.DataFrame.from_dict({'i': recipe_ids, 'ingr': ingr_ids})
 
-
-recipes['ingredient_ids'] = recipes['ingredient_ids'].map(
-    lambda str: [int(ingr_id) for ingr_id in str[1:-1].split(', ')])
+ingredient_ids = {}
+raw_recipes['ingredients'] = raw_recipes['ingredients'].map(
+    lambda str: [ingr_id for ingr_id in str[1:-1].split(', ')])
+# raw_recipes['tags'] = raw_recipes['tags'].map(
+#     lambda str: [tag for tag in str[1:-1].split(', ')])
 
 # Create a cross-reference tables for all recipes and ingredients
-recipe_ingr_xref = make_recipe_ingr_xref(recipes)
+recipe_ingr_xref = make_recipe_ingr_xref(raw_recipes)
 
 # Get the tf-idf embeddings
-tf_idf_embeddings = joblib.load('tfidf_transformer.pkl')
-# tf_idf_embeddings = get_tf_idf_embeddings(recipe_ingr_xref)
+# tf_idf_embeddings = joblib.load('tfidf_transformer.pkl')
+tf_idf_embeddings = get_tf_idf_embeddings(recipe_ingr_xref)
 
 # Merge preprocessed and raw recipe tables
-full_recipes = recipes.merge(raw_recipes, left_on='id', right_on='id')
+full_recipes = raw_recipes#recipes.merge(raw_recipes, left_on='id', right_on='id')
 
 
 def similar_recipes(embeddings, recipe_id, k):
@@ -134,9 +146,9 @@ start = time.time()
 # Content-based recommendations
 content_recs = similar_recipes(tf_idf_embeddings, recipe_id, k)
 
-print(f'If you liked {full_recipes[full_recipes["i"] == recipe_id].iloc[0]["name"]}, you might also like:')
+print(f'If you liked {full_recipes[full_recipes["id"] == recipe_id].iloc[0]["name"]}, you might also like:')
 for i, rec in enumerate(content_recs):
-    print(full_recipes[full_recipes['i'] == rec].iloc[0]['name'])
+    print(full_recipes[full_recipes['id'] == rec].iloc[0]['name'])
 print(time.time() - start)
 
 import pandas as pd
